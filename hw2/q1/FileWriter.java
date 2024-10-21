@@ -17,13 +17,15 @@ public class FileWriter {
 
     public static void main(String[] args) {
         try {
+            initFile(FILE_NAME);
             int[] numbers = generateRandomInts(NUM_INTEGERS, RANDOM_SEED);
-            writeRandomInts(numbers, FILE_NAME);
+            appendRandomInts(numbers, FILE_NAME);
             mergeSort(numbers, 0, numbers.length - 1);
             appendRandomInts(numbers, FILE_NAME);
             String encodedString = getHuffmanString(numbers);
             byte[] encodedBytes = stringToByte(encodedString);
             appendRandomBytes(encodedBytes, FILE_NAME);
+            updateFile(numbers, encodedBytes, FILE_NAME);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -109,6 +111,11 @@ public class FileWriter {
         return byteArray;
     }
 
+    // 将int转为byte[4]数组
+    private static byte[] intToByteArray(int value) {
+        return ByteBuffer.allocate(4).putInt(value).array();
+    }
+
     // 将byte数组追加到文件
     private static void appendRandomBytes(byte[] byteArray, String fileName) throws IOException {
         try {
@@ -116,21 +123,6 @@ public class FileWriter {
             fos.write(byteArray);
             fos.close();
             System.out.println("append over.");
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    // 将数组写入文件
-    private static void writeRandomInts(int[] numbers, String fileName) throws IOException {
-        try {
-            RandomAccessFile file = new RandomAccessFile(fileName, "rw");
-            for (int number : numbers) {
-                byte[] byteArray = intToByteArray(number);
-                file.write(byteArray);
-            }
-            file.close();
-            System.out.println("write over.");
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -151,9 +143,57 @@ public class FileWriter {
         }
     }
 
-    // 将int转为byte[4]数组
-    private static byte[] intToByteArray(int value) {
-        return ByteBuffer.allocate(4).putInt(value).array();
+    // 初始化文件头信息
+    private static void initFile(String fileName) throws IOException {
+        try {
+            RandomAccessFile file = new RandomAccessFile(fileName, "rw");
+            for (int i = 0; i < 6; i++) {
+                byte[] byteArray = intToByteArray(0);
+                file.write(byteArray);
+            }
+            file.close();
+            System.out.println("init over.");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void updateFile(int[] numbers, byte[] encodedBytes, String fileName) throws IOException {
+        int aPosition = 6 * 4;
+        int aLength = numbers.length * 4;
+        int bPosition = aPosition + aLength;
+        int bLength = numbers.length * 4;
+        int cPosition = bPosition + bLength;
+        int cLength = encodedBytes.length;
+        try (RandomAccessFile raf = new RandomAccessFile(fileName, "rw")) {
+            raf.seek(0);
+            raf.write(intToByteArray(aPosition));
+
+            raf.seek(4);
+            raf.write(intToByteArray(aLength));
+
+            raf.seek(8);
+            raf.write(intToByteArray(bPosition));
+
+            raf.seek(12);
+            raf.write(intToByteArray(bLength));
+
+            raf.seek(16);
+            raf.write(intToByteArray(cPosition));
+
+            raf.seek(20);
+            raf.write(intToByteArray(cLength));
+
+            System.out.println(aPosition);
+            System.out.println(aLength);
+            System.out.println(bPosition);
+            System.out.println(bLength);
+            System.out.println(cPosition);
+            System.out.println(cLength);
+            System.out.println("over.");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
 
