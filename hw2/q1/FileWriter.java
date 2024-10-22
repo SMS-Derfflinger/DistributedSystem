@@ -10,22 +10,27 @@ import java.util.HashMap;
 import java.util.PriorityQueue; 
 
 public class FileWriter {
-    private static final int NUM_INTEGERS = 1024 * 128;
+    private static final int NUM_INTEGERS = 1024 * 1024 * 128;
     private static final int MAX_RANDOM_NUMBER = 1024 * 128;
+    private static final int SEGMENT_LENGTH = 1024 * 1024;
     private static final int RANDOM_SEED = 237;
     private static final String FILE_NAME = "./hw2/q1/2252441-hw2-q1.dat";
 
     public static void main(String[] args) {
+        long start = System.nanoTime();
         try {
             initFile(FILE_NAME);
             int[] numbers = generateRandomInts(NUM_INTEGERS, RANDOM_SEED);
             appendRandomInts(numbers, FILE_NAME);
             mergeSort(numbers, 0, numbers.length - 1);
+            System.out.println("sort over.");
             appendRandomInts(numbers, FILE_NAME);
-            String encodedString = getHuffmanString(numbers);
-            byte[] encodedBytes = stringToByte(encodedString);
-            appendRandomBytes(encodedBytes, FILE_NAME);
-            updateFile(numbers, encodedBytes, FILE_NAME);
+            int bytesSize = writeHuffmanCode(numbers, SEGMENT_LENGTH, FILE_NAME);
+            updateFile(numbers, bytesSize, FILE_NAME);
+
+            long end = System.nanoTime();
+            long duration = (end - start);
+            System.out.println("生成所需时间: " + duration / 1000000 + "(毫秒)");
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -84,18 +89,44 @@ public class FileWriter {
         for (int i = 0; i < size; i++) {
             numbers[i] = random.nextInt(MAX_RANDOM_NUMBER) + 1;
         }
+        System.out.println("generate over.");
         return numbers;
     }
 
-    // 将霍夫曼编码转换为二进制字符串
-    private static String getHuffmanString(int[] numbers) {
+    // 传入排好序的数组，构建霍夫曼树，写入霍夫曼编码到文件中，返回编码的长度
+    private static int writeHuffmanCode(int[] numbers, int segmentLength, String fileName) throws IOException {
         HuffmanCode huffmanCode = new HuffmanCode(numbers);
         Map<Integer, String> huffmanCodes = huffmanCode.getHuffmanCodes();
-        StringBuilder encodedString = new StringBuilder();
-        for (int num : numbers) {
-            encodedString.append(huffmanCodes.get(num));
+        StringBuilder encodedString;
+        byte[] bytes = {};
+        for (int i = 0; i < numbers.length / segmentLength * segmentLength; i += segmentLength) {
+            encodedString = new StringBuilder();
+            for (int j = 0; j < segmentLength; j++) {
+                encodedString.append(huffmanCodes.get(numbers[j + i * segmentLength]));
+            }
+            String data = encodedString.toString();
+            byte[] tempBytes = stringToByte(data);
+            bytes = mergeByteArrays(bytes, tempBytes);
         }
-        return encodedString.toString();
+
+        encodedString = new StringBuilder();
+        for (int i = numbers.length / segmentLength * segmentLength; i < numbers.length; i++) {
+            encodedString.append(huffmanCodes.get(numbers[i]));
+        }
+        String data = encodedString.toString();
+        byte[] tempBytes = stringToByte(data);
+        bytes = mergeByteArrays(bytes, tempBytes);
+        appendRandomBytes(bytes, fileName);
+        System.out.println("append over.");
+
+        return bytes.length;
+    }
+
+    private static byte[] mergeByteArrays(byte[] array1, byte[] array2) {
+        byte[] mergedArray = new byte[array1.length + array2.length];
+        System.arraycopy(array1, 0, mergedArray, 0, array1.length);
+        System.arraycopy(array2, 0, mergedArray, array1.length, array2.length);
+        return mergedArray;
     }
 
     // 将字符串转为byte数组
@@ -111,6 +142,18 @@ public class FileWriter {
         return byteArray;
     }
 
+    // 将int数组转为字节数组
+    private static byte[] intsToBytes(int[] numbers) {
+        byte[] bytes = new byte[numbers.length * 4];
+        for (int i = 0; i < numbers.length; i++) {
+            byte[] fourBytes = intToByteArray(numbers[i]);
+            for (int j = 0; j < 4; j++) {
+                bytes[i * 4 + j] = fourBytes[j];
+            }
+        }
+        return bytes;
+    }
+
     // 将int转为byte[4]数组
     private static byte[] intToByteArray(int value) {
         return ByteBuffer.allocate(4).putInt(value).array();
@@ -122,7 +165,6 @@ public class FileWriter {
             FileOutputStream fos = new FileOutputStream(fileName, true);
             fos.write(byteArray);
             fos.close();
-            System.out.println("append over.");
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -130,14 +172,18 @@ public class FileWriter {
 
     // 将数组追加到文件
     private static void appendRandomInts(int[] numbers, String fileName) throws IOException {
+        byte[] bytes = intsToBytes(numbers);
+        appendRandomBytes(bytes, fileName);
+        System.out.println("append over.");
+    }
+
+    // 追加1个int到文件
+    private static void appendInt(int data, String fileName) throws IOException {
         try {
             FileOutputStream fos = new FileOutputStream(fileName, true);
-            for (int number : numbers) {
-                byte[] byteArray = intToByteArray(number);
-                fos.write(byteArray);
-            }
+            byte[] byteArray = intToByteArray(data);
+            fos.write(byteArray);
             fos.close();
-            System.out.println("append over.");
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -158,13 +204,13 @@ public class FileWriter {
         }
     }
 
-    private static void updateFile(int[] numbers, byte[] encodedBytes, String fileName) throws IOException {
+    private static void updateFile(int[] numbers, int bytesSize, String fileName) throws IOException {
         int aPosition = 6 * 4;
         int aLength = numbers.length * 4;
         int bPosition = aPosition + aLength;
         int bLength = numbers.length * 4;
         int cPosition = bPosition + bLength;
-        int cLength = encodedBytes.length;
+        int cLength = bytesSize;
         try (RandomAccessFile raf = new RandomAccessFile(fileName, "rw")) {
             raf.seek(0);
             raf.write(intToByteArray(aPosition));
@@ -184,12 +230,12 @@ public class FileWriter {
             raf.seek(20);
             raf.write(intToByteArray(cLength));
 
-            System.out.println(aPosition);
-            System.out.println(aLength);
-            System.out.println(bPosition);
-            System.out.println(bLength);
-            System.out.println(cPosition);
-            System.out.println(cLength);
+            System.out.println("a部分起始位置: " + aPosition);
+            System.out.println("a部分长度: " + aLength);
+            System.out.println("b部分起始位置: " + bPosition);
+            System.out.println("b部分长度: " + bLength);
+            System.out.println("c部分起始位置: " + cPosition);
+            System.out.println("c部分长度: " + cLength);
             System.out.println("over.");
         } catch (IOException e) {
             e.printStackTrace();
