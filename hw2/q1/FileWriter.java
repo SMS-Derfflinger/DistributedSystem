@@ -1,33 +1,41 @@
 package q1;
 
 import java.io.RandomAccessFile;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Random;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.PriorityQueue; 
+import java.util.*;
 
 public class FileWriter {
     private static final int NUM_INTEGERS = 1024 * 1024 * 128;
     private static final int MAX_RANDOM_NUMBER = 1024 * 128;
     private static final int SEGMENT_LENGTH = 1024 * 1024;
     private static final int RANDOM_SEED = 237;
+    private static final int FIND_NUMBER = 1024 * 64;
+    private static final int HEADER_SIZE = 24;
     private static final String FILE_NAME = "./hw2/q1/2252441-hw2-q1.dat";
 
     public static void main(String[] args) {
+        try {
+            //createFile();
+            findInts(FIND_NUMBER, HEADER_SIZE, FILE_NAME);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void createFile() {
         long start = System.nanoTime();
         try {
             initFile(FILE_NAME);
-            int[] numbers = generateRandomInts(NUM_INTEGERS, RANDOM_SEED);
+            int[] numbers = generateRandomInts(NUM_INTEGERS, RANDOM_SEED, MAX_RANDOM_NUMBER);
             appendRandomInts(numbers, FILE_NAME);
             mergeSort(numbers, 0, numbers.length - 1);
             System.out.println("sort over.");
             appendRandomInts(numbers, FILE_NAME);
             int bytesSize = writeHuffmanCode(numbers, SEGMENT_LENGTH, FILE_NAME);
             updateFile(numbers, bytesSize, FILE_NAME);
-
             long end = System.nanoTime();
             long duration = (end - start);
             System.out.println("生成所需时间: " + duration / 1000000 + "(毫秒)");
@@ -36,7 +44,7 @@ public class FileWriter {
         }
     }
 
-    // 归并排序
+    /** 归并排序*/
     private static void mergeSort(int[] numbers, int left, int right) {
         if (left >= right) {
             return;
@@ -47,7 +55,7 @@ public class FileWriter {
         merge(numbers, left, mid, right);
     }
 
-    // 合并两个排好序的子数组
+    /** 合并两个排好序的子数组*/
     private static void merge(int[] numbers, int left, int mid, int right) {
         int n1 = mid - left + 1;
         int n2 = right - mid;
@@ -83,11 +91,11 @@ public class FileWriter {
     }
 
     // 生成随机数数组
-    private static int[] generateRandomInts(int size, int seed) {
+    private static int[] generateRandomInts(int size, int seed, int maxNumber) {
         int[] numbers = new int[size];
         Random random = new Random(seed);
         for (int i = 0; i < size; i++) {
-            numbers[i] = random.nextInt(MAX_RANDOM_NUMBER) + 1;
+            numbers[i] = random.nextInt(maxNumber) + 1;
         }
         System.out.println("generate over.");
         return numbers;
@@ -189,7 +197,7 @@ public class FileWriter {
         }
     }
 
-    // 初始化文件头信息
+    /** 初始化文件头信息 */
     private static void initFile(String fileName) throws IOException {
         try {
             RandomAccessFile file = new RandomAccessFile(fileName, "rw");
@@ -204,6 +212,7 @@ public class FileWriter {
         }
     }
 
+    /** 更新文件头信息*/
     private static void updateFile(int[] numbers, int bytesSize, String fileName) throws IOException {
         int aPosition = 6 * 4;
         int aLength = numbers.length * 4;
@@ -240,6 +249,71 @@ public class FileWriter {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    /** 将字节数组转换为int数组*/
+    public static int[] byteArrayToIntArray(byte[] byteArray) {
+        int length = byteArray.length / 4;
+        int[] intArray = new int[length];
+
+        ByteBuffer buffer = ByteBuffer.wrap(byteArray);
+        for (int i = 0; i < length; i++) {
+            intArray[i] = buffer.getInt();
+        }
+
+        return intArray;
+    }
+
+    /** 在文件中查找目标整数*/ 
+    private static void findInts(int findNumber, int headerSize, String fileName) throws IOException {
+        try {
+            FileInputStream fis = new FileInputStream(fileName);
+            byte[] header = new byte[headerSize];
+            fis.read(header);
+            int[] headerInfo = byteArrayToIntArray(header);
+            findIntsPartA(fis, findNumber, headerInfo, fileName);
+            
+        } catch (IOException e) {
+            e.printStackTrace();
+        };
+    }
+
+    /** 使用传入的FileInputStream继续读取数组 */
+    private static void findIntsPartA(FileInputStream fis, int findNumber, int[] headerInfo, String fileName) throws IOException {
+        long start = System.nanoTime();
+        try {
+            byte[] partRandom = new byte[headerInfo[1]];
+            fis.read(partRandom);
+            int[] partAInts = byteArrayToIntArray(partRandom);
+            
+            List<Integer> list = findIntsRandom(partAInts, findNumber, headerInfo.length);
+            System.out.println("A部分整数值: " + list.size());
+            System.out.println(list);
+            
+            long end = System.nanoTime();
+            long duration = (end - start);
+            System.out.println("A部分查找所需时间: " + duration / 1000000 + "(毫秒)");
+            fis.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        };
+    }
+
+    /** 在int随机数组中查找不小于且最接近目标整数的整数，返回它在byte随机数组中的位置 */
+    private static List<Integer> findIntsRandom(int[] numbers, int findNumber, int headerSize) {
+        List<Integer> list = new ArrayList<>();
+        int minNum = 2147483647;
+        for (int i = 0; i < numbers.length; i++) {
+            if (numbers[i] < findNumber || numbers[i] > minNum) {
+                continue;
+            }
+            if (numbers[i] < minNum) {
+                list = new ArrayList<>();
+                minNum = numbers[i];
+            }
+            list.add(i * 4 + headerSize);
+        }
+        return list;
     }
 }
 
