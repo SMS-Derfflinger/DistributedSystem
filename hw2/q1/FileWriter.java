@@ -102,7 +102,7 @@ public class FileWriter {
     }
 
     // 传入排好序的数组，构建霍夫曼树，写入霍夫曼编码到文件中，返回编码的长度
-    private static int writeHuffmanCode(int[] numbers, int segmentLength, String fileName) throws IOException {
+    private static int writeHuffmanCode(int[] numbers, int segmentLength, String filePath) throws IOException {
         HuffmanCode huffmanCode = new HuffmanCode(numbers);
         Map<Integer, String> huffmanCodes = huffmanCode.getHuffmanCodes();
         StringBuilder encodedString;
@@ -124,7 +124,7 @@ public class FileWriter {
         String data = encodedString.toString();
         byte[] tempBytes = stringToByte(data);
         bytes = mergeByteArrays(bytes, tempBytes);
-        appendRandomBytes(bytes, fileName);
+        appendRandomBytes(bytes, filePath);
         System.out.println("append over.");
 
         return bytes.length;
@@ -168,9 +168,9 @@ public class FileWriter {
     }
 
     // 将byte数组追加到文件
-    private static void appendRandomBytes(byte[] byteArray, String fileName) throws IOException {
+    private static void appendRandomBytes(byte[] byteArray, String filePath) throws IOException {
         try {
-            FileOutputStream fos = new FileOutputStream(fileName, true);
+            FileOutputStream fos = new FileOutputStream(filePath, true);
             fos.write(byteArray);
             fos.close();
         } catch (Exception e) {
@@ -179,16 +179,16 @@ public class FileWriter {
     }
 
     // 将数组追加到文件
-    private static void appendRandomInts(int[] numbers, String fileName) throws IOException {
+    private static void appendRandomInts(int[] numbers, String filePath) throws IOException {
         byte[] bytes = intsToBytes(numbers);
-        appendRandomBytes(bytes, fileName);
+        appendRandomBytes(bytes, filePath);
         System.out.println("append over.");
     }
 
     // 追加1个int到文件
-    private static void appendInt(int data, String fileName) throws IOException {
+    private static void appendInt(int data, String filePath) throws IOException {
         try {
-            FileOutputStream fos = new FileOutputStream(fileName, true);
+            FileOutputStream fos = new FileOutputStream(filePath, true);
             byte[] byteArray = intToByteArray(data);
             fos.write(byteArray);
             fos.close();
@@ -198,9 +198,9 @@ public class FileWriter {
     }
 
     /** 初始化文件头信息 */
-    private static void initFile(String fileName) throws IOException {
+    private static void initFile(String filePath) throws IOException {
         try {
-            RandomAccessFile file = new RandomAccessFile(fileName, "rw");
+            RandomAccessFile file = new RandomAccessFile(filePath, "rw");
             for (int i = 0; i < 6; i++) {
                 byte[] byteArray = intToByteArray(0);
                 file.write(byteArray);
@@ -213,14 +213,14 @@ public class FileWriter {
     }
 
     /** 更新文件头信息*/
-    private static void updateFile(int[] numbers, int bytesSize, String fileName) throws IOException {
+    private static void updateFile(int[] numbers, int bytesSize, String filePath) throws IOException {
         int aPosition = 6 * 4;
         int aLength = numbers.length * 4;
         int bPosition = aPosition + aLength;
         int bLength = numbers.length * 4;
         int cPosition = bPosition + bLength;
         int cLength = bytesSize;
-        try (RandomAccessFile raf = new RandomAccessFile(fileName, "rw")) {
+        try (RandomAccessFile raf = new RandomAccessFile(filePath, "rw")) {
             raf.seek(0);
             raf.write(intToByteArray(aPosition));
 
@@ -265,34 +265,34 @@ public class FileWriter {
     }
 
     /** 在文件中查找目标整数*/ 
-    private static void findInts(int findNumber, int headerSize, String fileName) throws IOException {
+    private static void findInts(int findNumber, int headerSize, String filePath) throws IOException {
         try {
-            FileInputStream fis = new FileInputStream(fileName);
+            FileInputStream fis = new FileInputStream(filePath);
             byte[] header = new byte[headerSize];
             fis.read(header);
             int[] headerInfo = byteArrayToIntArray(header);
-            findIntsPartA(fis, findNumber, headerInfo, fileName);
-            
+            findIntsPartA(fis, findNumber, headerInfo, filePath);
+            findIntsPartB(findNumber, headerInfo, filePath);
         } catch (IOException e) {
             e.printStackTrace();
         };
     }
 
     /** 使用传入的FileInputStream继续读取数组 */
-    private static void findIntsPartA(FileInputStream fis, int findNumber, int[] headerInfo, String fileName) throws IOException {
+    private static void findIntsPartA(FileInputStream fis, int findNumber, int[] headerInfo, String filePath) throws IOException {
         long start = System.nanoTime();
         try {
             byte[] partRandom = new byte[headerInfo[1]];
             fis.read(partRandom);
             int[] partAInts = byteArrayToIntArray(partRandom);
-            
             List<Integer> list = findIntsRandom(partAInts, findNumber, headerInfo.length);
-            System.out.println("A部分整数值: " + list.size());
-            System.out.println(list);
-            
+
             long end = System.nanoTime();
             long duration = (end - start);
             System.out.println("A部分查找所需时间: " + duration / 1000000 + "(毫秒)");
+
+            System.out.println("A部分整数值: " + list.size());
+            System.out.println(list);
             fis.close();
         } catch (IOException e) {
             e.printStackTrace();
@@ -314,6 +314,64 @@ public class FileWriter {
             list.add(i * 4 + headerSize);
         }
         return list;
+    }
+
+    private static void findIntsPartB(int findNumber, int[] headerInfo, String filePath) throws IOException {
+        try {
+            long startTime = System.nanoTime();
+            RandomAccessFile raf = new RandomAccessFile(filePath, "r");
+            int start = headerInfo[2];
+            int length = headerInfo[3] / 4;
+            int end = headerInfo[4];
+
+            int firstPos = binarySearch(raf, start, length, findNumber);
+            List<Integer> list = new ArrayList<>();
+            while (firstPos < end) {
+                raf.seek(firstPos);
+                int value = raf.readInt();
+                if (value == findNumber) {
+                    list.add(firstPos);
+                    firstPos += 4;
+                } else {
+                    break;
+                }
+            }
+            long endTime = System.nanoTime();
+            long duration = (endTime - startTime);
+            System.out.println("B部分查找所需时间: " + duration / 1000000 + "(毫秒)");
+
+            System.out.println("B部分整数值: " + list.size());
+            System.out.println(list);
+        } catch (IOException e) {
+            e.printStackTrace();
+        };
+    }
+
+    private static int binarySearch(RandomAccessFile raf, int start, int length, int findNumber) throws IOException {
+        try {
+            int low = 0;
+            int high = length - 1;
+            int firstPos = -1;
+
+            while (low <= high) {
+                int mid = (low + high) / 2;
+                int midPos = start + mid * 4;
+                raf.seek(midPos);
+                int midValue = raf.readInt();
+                if (midValue < findNumber) {
+                    low = mid + 1;
+                } else if (midValue > findNumber) {
+                    high = mid - 1;
+                } else {
+                    firstPos = midPos;
+                    high = mid - 1;
+                }
+            }
+            return firstPos;
+        } catch (IOException e) {
+            e.printStackTrace();
+        };
+        return -1;
     }
 }
 
