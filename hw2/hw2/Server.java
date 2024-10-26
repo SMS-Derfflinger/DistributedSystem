@@ -6,18 +6,13 @@ import java.io.RandomAccessFile;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
-import java.util.concurrent.Executors;
 
 public class Server {
     private static final String FILE_PATH = "./hw2/2252441-hw2-q1.dat";
-    private static final int THREAD_NUM = 3;
 
     public static void main(String[] args) {
         try (ServerSocket serverSocket = new ServerSocket(12345)) {
             System.out.println("Server is listening on port 12345");
-
-            var executor = Executors.newFixedThreadPool(THREAD_NUM);
 
             while (true) {
                 Socket socket = serverSocket.accept();
@@ -33,16 +28,17 @@ public class Server {
     private static void handleClient(Socket socket) {
         try (socket;
              DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-             RandomAccessFile file = new RandomAccessFile(FILE_PATH, "rw");
+             RandomAccessFile file = new RandomAccessFile(FILE_PATH, "r"); // 使用只读模式
              FileChannel fileChannel = file.getChannel()) {
 
-            // 对文件加锁，防止多个客户端同时写入
-            try (FileLock lock = fileChannel.lock()) {
-                System.out.println("File locked by server for client: " + socket.getInetAddress());
+            // 对文件加锁，只在写操作时需要锁，读操作可以并发
+            synchronized (Server.class) {
+                System.out.println("File being accessed by client: " + socket.getInetAddress());
 
                 // 发送文件大小
                 long fileSize = file.length();
                 out.writeLong(fileSize);
+                out.flush();
 
                 // 发送文件数据
                 byte[] buffer = new byte[4096];
@@ -50,6 +46,7 @@ public class Server {
                 file.seek(0);
                 while ((bytesRead = file.read(buffer)) != -1) {
                     out.write(buffer, 0, bytesRead);
+                    out.flush();
                 }
                 System.out.println("File sent to client: " + socket.getInetAddress());
             }
