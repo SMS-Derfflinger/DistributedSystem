@@ -1,24 +1,29 @@
 package q1;
 
 import java.io.RandomAccessFile;
+import java.io.Serializable;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
 import java.util.*;
 
 public class FileWriter {
     private static final int NUM_INTEGERS = 1024 * 1024 * 128;
     private static final int MAX_RANDOM_NUMBER = 1024 * 128;
-    private static final int SEGMENT_LENGTH = 1024 * 1024;
+    private static final int SEGMENT_LENGTH = 1024 * 128;
     private static final int RANDOM_SEED = 237;
     private static final int FIND_NUMBER = 1024 * 64;
     private static final int HEADER_SIZE = 24;
-    private static final String FILE_NAME = "./hw2/q1/2252441-hw2-q1.dat";
+    private static final String FILE_NAME = "./hw2/2252441-hw2-q1.dat";
 
     public static void main(String[] args) {
         try {
-            //createFile();
+            createFile();
             findInts(FIND_NUMBER, HEADER_SIZE, FILE_NAME);
         } catch (Exception e) {
             e.printStackTrace();
@@ -101,40 +106,76 @@ public class FileWriter {
         return numbers;
     }
 
-    // 传入排好序的数组，构建霍夫曼树，写入霍夫曼编码到文件中，返回编码的长度
+    /**
+     * 传入排好序的数组，构建霍夫曼树，写入霍夫曼编码到文件中，返回编码的长度
+     * 写入时首先写入序列化霍夫曼树的长度，然后写入霍夫曼树的结构，
+     * 然后写入霍夫曼编码部分的总段数，分段写入霍夫曼编码，每段的头信息为两个int，
+     * 是这一段字节数组的长度、这一段字节数组对应的编码中含的原始数据个数
+     * @param numbers
+     * @param segmentLength
+     * @param filePath
+     * @return
+     * @throws IOException
+     */
     private static int writeHuffmanCode(int[] numbers, int segmentLength, String filePath) throws IOException {
         HuffmanCode huffmanCode = new HuffmanCode(numbers);
         Map<Integer, String> huffmanCodes = huffmanCode.getHuffmanCodes();
+        byte[] serializeTree = huffmanCode.serialize();
+        appendInt(serializeTree.length, filePath);
+        appendRandomBytes(serializeTree, filePath);
+
+        int totalSegment = 0;
+        List<byte[]> byteList = new ArrayList<>();
+        List<Integer> numList = new ArrayList<>();
+        List<Integer> sizeList = new ArrayList<>();
+
         StringBuilder encodedString;
-        byte[] bytes = {};
+        int temp;
         for (int i = 0; i < numbers.length / segmentLength * segmentLength; i += segmentLength) {
             encodedString = new StringBuilder();
             for (int j = 0; j < segmentLength; j++) {
-                encodedString.append(huffmanCodes.get(numbers[j + i * segmentLength]));
+                temp = numbers[j + i];
+                encodedString.append(huffmanCodes.get(temp));
             }
             String data = encodedString.toString();
             byte[] tempBytes = stringToByte(data);
-            bytes = mergeByteArrays(bytes, tempBytes);
+
+            totalSegment++;
+            sizeList.add(tempBytes.length);
+            numList.add(segmentLength);
+            byteList.add(tempBytes);
         }
 
         encodedString = new StringBuilder();
+        int lastNum = 0;
         for (int i = numbers.length / segmentLength * segmentLength; i < numbers.length; i++) {
+            lastNum++;
             encodedString.append(huffmanCodes.get(numbers[i]));
         }
         String data = encodedString.toString();
         byte[] tempBytes = stringToByte(data);
-        bytes = mergeByteArrays(bytes, tempBytes);
-        appendRandomBytes(bytes, filePath);
+        totalSegment++;
+        sizeList.add(tempBytes.length);
+        numList.add(lastNum);
+        byteList.add(tempBytes);
+
+        appendInt(totalSegment, filePath);
+        byte[] finalData = mergeByteArraysAndInts(byteList, numList, sizeList);
+        appendRandomBytes(finalData, filePath);
         System.out.println("append over.");
 
-        return bytes.length;
+        return 4 * 2 + serializeTree.length + finalData.length;
     }
 
-    private static byte[] mergeByteArrays(byte[] array1, byte[] array2) {
-        byte[] mergedArray = new byte[array1.length + array2.length];
-        System.arraycopy(array1, 0, mergedArray, 0, array1.length);
-        System.arraycopy(array2, 0, mergedArray, array1.length, array2.length);
-        return mergedArray;
+    private static byte[] mergeByteArraysAndInts(List<byte[]> byteArrays, List<Integer> integers, List<Integer> sizeList) throws IOException {
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            for (int i = 0; i < byteArrays.size(); i++) {
+                outputStream.write(ByteBuffer.allocate(4).putInt(sizeList.get(i)).array());
+                outputStream.write(ByteBuffer.allocate(4).putInt(integers.get(i)).array());
+                outputStream.write(byteArrays.get(i));
+            }
+            return outputStream.toByteArray();
+        }
     }
 
     // 将字符串转为byte数组
@@ -264,8 +305,8 @@ public class FileWriter {
         return intArray;
     }
 
-    /** 在文件中查找目标整数*/ 
-    private static void findInts(int findNumber, int headerSize, String filePath) throws IOException {
+    /** 在文件中查找目标整数 */ 
+    private static void findInts(int findNumber, int headerSize, String filePath) throws IOException, ClassNotFoundException {
         try {
             FileInputStream fis = new FileInputStream(filePath);
             byte[] header = new byte[headerSize];
@@ -273,6 +314,7 @@ public class FileWriter {
             int[] headerInfo = byteArrayToIntArray(header);
             findIntsPartA(fis, findNumber, headerInfo, filePath);
             findIntsPartB(findNumber, headerInfo, filePath);
+            findIntsPartC(findNumber, headerInfo, filePath);
         } catch (IOException e) {
             e.printStackTrace();
         };
@@ -285,22 +327,27 @@ public class FileWriter {
             byte[] partRandom = new byte[headerInfo[1]];
             fis.read(partRandom);
             int[] partAInts = byteArrayToIntArray(partRandom);
-            List<Integer> list = findIntsRandom(partAInts, findNumber, headerInfo.length);
+            List<Integer> list = findIntsRandom(partAInts, findNumber);
+            int num = partAInts[list.get(0)];
+            List<Integer> byteLocations = new ArrayList<>();
+            for (int i = 0; i < list.size(); i++) {
+                byteLocations.add(list.get(i) * 4 + headerInfo.length);
+            }
 
             long end = System.nanoTime();
             long duration = (end - start);
             System.out.println("A部分查找所需时间: " + duration / 1000000 + "(毫秒)");
-
-            System.out.println("A部分整数值: " + list.size());
-            System.out.println(list);
+            System.out.println("A部分整数值: " + num);
+            System.out.println("A部分整数值个数: " + byteLocations.size());
+            System.out.println(byteLocations);
             fis.close();
         } catch (IOException e) {
             e.printStackTrace();
         };
     }
 
-    /** 在int随机数组中查找不小于且最接近目标整数的整数，返回它在byte随机数组中的位置 */
-    private static List<Integer> findIntsRandom(int[] numbers, int findNumber, int headerSize) {
+    /** 在int随机数组中查找不小于且最接近目标整数的整数，返回它在int数组中的位置 */
+    private static List<Integer> findIntsRandom(int[] numbers, int findNumber) {
         List<Integer> list = new ArrayList<>();
         int minNum = 2147483647;
         for (int i = 0; i < numbers.length; i++) {
@@ -311,7 +358,7 @@ public class FileWriter {
                 list = new ArrayList<>();
                 minNum = numbers[i];
             }
-            list.add(i * 4 + headerSize);
+            list.add(i);
         }
         return list;
     }
@@ -326,27 +373,31 @@ public class FileWriter {
 
             int firstPos = binarySearch(raf, start, length, findNumber);
             List<Integer> list = new ArrayList<>();
-            while (firstPos < end) {
-                raf.seek(firstPos);
+            int pos = firstPos;
+            while (pos < end) {
+                raf.seek(pos);
                 int value = raf.readInt();
                 if (value == findNumber) {
-                    list.add(firstPos);
-                    firstPos += 4;
+                    list.add(pos);
+                    pos += 4;
                 } else {
                     break;
                 }
             }
+            raf.seek(firstPos);
+            int num = raf.readInt();
             long endTime = System.nanoTime();
             long duration = (endTime - startTime);
             System.out.println("B部分查找所需时间: " + duration / 1000000 + "(毫秒)");
-
-            System.out.println("B部分整数值: " + list.size());
+            System.out.println("B部分整数值: " + num);
+            System.out.println("B部分整数值个数: " + list.size());
             System.out.println(list);
         } catch (IOException e) {
             e.printStackTrace();
         };
     }
 
+    /** 在文件中进行二分查找，返回在文件中的第一个符合条件的数据的位置 */
     private static int binarySearch(RandomAccessFile raf, int start, int length, int findNumber) throws IOException {
         try {
             int low = 0;
@@ -360,8 +411,6 @@ public class FileWriter {
                 int midValue = raf.readInt();
                 if (midValue < findNumber) {
                     low = mid + 1;
-                } else if (midValue > findNumber) {
-                    high = mid - 1;
                 } else {
                     firstPos = midPos;
                     high = mid - 1;
@@ -373,9 +422,102 @@ public class FileWriter {
         };
         return -1;
     }
+
+    private static int binarySearch(int[] numbers, int start, int findNumber) {
+        int left = 0;
+        int right = numbers.length - 1;
+        int firstPos = -1;
+
+        while (left <= right) {
+            int mid = left + (right - left) / 2;
+
+            if (numbers[mid] < findNumber) {
+                left = mid + 1;
+            } else if (numbers[mid] < findNumber){
+                right = mid - 1;
+            } else {
+                firstPos = mid;
+                right = mid - 1;
+            }
+        }
+        return firstPos;
+    }
+
+    private static void findIntsPartC(int findNumber, int[] headerInfo, String filePath) throws IOException, ClassNotFoundException {
+        try {
+            long startTime = System.nanoTime();
+            RandomAccessFile raf = new RandomAccessFile(filePath, "r");
+            raf.seek(headerInfo[4]);
+            int treeSize = raf.readInt();
+            byte[] buffer = new byte[treeSize];
+            raf.readFully(buffer);
+            HuffmanCode huffmanCode = new HuffmanCode();
+            huffmanCode.deserialize(buffer);
+
+            Map<String, Integer> convertedMap = new HashMap<>();
+            // 遍历原始 Map 并进行转换
+            for (Map.Entry<Integer, String> entry : huffmanCode.getHuffmanCodes().entrySet()) {
+                Integer key = entry.getKey();
+                String value = entry.getValue();
+                convertedMap.put(value, key); // 交换 key 和 value
+            }
+
+            List<Integer> decodedValues = new ArrayList<>();
+            List<Integer> locations = new ArrayList<>();
+            int minNum = 2147483647;
+            int totalSegment = raf.readInt();
+            for (int i = 0; i < totalSegment; i++) {
+                int size = raf.readInt();
+                int totalNum = raf.readInt();
+                int totalReadNum = 0;
+                byte[] encodedData = new byte[size];
+                raf.readFully(encodedData);
+
+                StringBuilder binString = new StringBuilder();
+                for (int j = 0; j < encodedData.length; j++) {
+                    for (int k = 7; k >= 0; k--) {
+                        int bit = (encodedData[j] >> k) & 0b00000001;
+                        binString.append(bit);
+                        if (convertedMap.containsKey(binString.toString())) {
+                            int readNum = convertedMap.get(binString.toString());
+                            if (readNum >= findNumber && readNum <= minNum) {
+                                if (readNum < minNum) {
+                                    locations = new ArrayList<>();
+                                    minNum = readNum;
+                                }
+                                locations.add((int) raf.getFilePointer() - size + j);
+                            }
+
+                            decodedValues.add(convertedMap.get(binString.toString()));
+                            binString = new StringBuilder();
+                            totalReadNum++;
+                        }
+                        if (totalReadNum >= totalNum) {
+                            break;
+                        }
+                    }
+                }
+            }
+            int[] numbers = new int[decodedValues.size()];
+            for (int i = 0; i < decodedValues.size(); i++) {
+                numbers[i] = decodedValues.get(i);
+            }
+
+            long endTime = System.nanoTime();
+            long duration = (endTime - startTime);
+            System.out.println("C部分查找所需时间: " + duration / 1000000 + "(毫秒)");
+            System.out.println("C部分整数值: " + findNumber);
+            System.out.println("C部分整数个数: " + locations.size());
+            System.out.println(locations);
+
+            raf.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        };
+    }
 }
 
-class HuffmanNode implements Comparable<HuffmanNode> {
+class HuffmanNode implements Comparable<HuffmanNode>, Serializable {
     int value;
     int frequency;
     HuffmanNode left;
@@ -400,6 +542,7 @@ class HuffmanNode implements Comparable<HuffmanNode> {
     }
 }
 
+/** 霍夫曼树 */
 class HuffmanCode {
     private Map<Integer, String> huffmanCodes;
     private HuffmanNode root;
@@ -451,5 +594,55 @@ class HuffmanCode {
         }
         generateCodes(node.left, code + "0");
         generateCodes(node.right, code + "1");
+    }
+
+    /** 序列化霍夫曼树 */
+    public byte[] serialize() throws IOException {
+        try (ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
+             ObjectOutputStream out = new ObjectOutputStream(byteOut)) {
+            out.writeObject(this.root);
+            return byteOut.toByteArray();
+        }
+    }
+
+    /** 反序列化霍夫曼树 */
+    public void deserialize(byte[] data) throws IOException, ClassNotFoundException {
+        try (ByteArrayInputStream byteIn = new ByteArrayInputStream(data);
+             ObjectInputStream in = new ObjectInputStream(byteIn)) {
+            this.root = (HuffmanNode) in.readObject();
+            generateCodes(root, "");
+        }
+    }
+
+
+    public int[] decode(byte[] encodedData) {
+        Map<String, Integer> convertedMap = new HashMap<>();
+
+        // 遍历原始 Map 并进行转换
+        for (Map.Entry<Integer, String> entry : this.huffmanCodes.entrySet()) {
+            Integer key = entry.getKey();
+            String value = entry.getValue();
+            convertedMap.put(value, key); // 交换 key 和 value
+        }
+
+        List<Integer> decodedValues = new ArrayList<>();
+        StringBuilder binString = new StringBuilder();
+        for (byte b : encodedData) {
+            for (int i = 7; i >= 0; i--) {
+                int bit = (b >> i) & 0b00000001;
+                binString.append(bit);
+                if (convertedMap.containsKey(binString.toString())) {
+                    decodedValues.add(convertedMap.get(binString.toString()));
+                    binString = new StringBuilder();
+                }
+            }
+        }
+
+        int[] array = new int[decodedValues.size()];
+        for (int i = 0; i < decodedValues.size(); i++) {
+            array[i] = decodedValues.get(i);
+        }
+
+        return array;
     }
 }
