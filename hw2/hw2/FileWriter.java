@@ -1,4 +1,4 @@
-package q1;
+package hw2;
 
 import java.io.RandomAccessFile;
 import java.io.Serializable;
