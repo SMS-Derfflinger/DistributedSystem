@@ -9,7 +9,6 @@ import static hw2.FileWriter.*;
 
 public class Client2 {
     private static final String LOCAL_FILE_PATH = "received-2.dat";
-    private static final String SERVER_HOST = "localhost";
 
     public static void main(String[] args) throws ClassNotFoundException {
         try (Socket socket = new Socket(SERVER_HOST, SERVER_PORT);
@@ -20,9 +19,10 @@ public class Client2 {
             out.writeUTF("WRITE");
             receiveFileFromServer(in);
             findInts(FIND_NUMBER, HEADER_SIZE, LOCAL_FILE_PATH);
-            processFile(out, LOCAL_FILE_PATH, HEADER_SIZE, FIND_NUMBER);
+            processFile(LOCAL_FILE_PATH, HEADER_SIZE, FIND_NUMBER);
 
             sendFileToServer(out, LOCAL_FILE_PATH);
+            System.out.println("Connection closed.");
             File file = new File(LOCAL_FILE_PATH);
             file.delete();
         } catch (IOException e) {
@@ -33,14 +33,18 @@ public class Client2 {
              DataInputStream in = new DataInputStream(socket.getInputStream());
              DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
             out.writeUTF("READ");
+
             receiveFileFromServer(in);
+            System.out.println("Connection closed.");
             findInts(FIND_NUMBER, HEADER_SIZE, LOCAL_FILE_PATH);
+            File file = new File(LOCAL_FILE_PATH);
+            file.delete();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private static void processFile(DataOutputStream out, String filePath, int headerSize, int findNumber) throws IOException {
+    private static void processFile(String filePath, int headerSize, int findNumber) throws IOException {
         long start = System.nanoTime();
         try {
             int[] headerInfo;

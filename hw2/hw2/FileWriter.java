@@ -19,7 +19,7 @@ public class FileWriter {
     public static final int RANDOM_SEED = 237;
     public static final int FIND_NUMBER = 1024 * 64;
     public static final int HEADER_SIZE = 24;
-    private static final String FILE_NAME = "./hw2/2252441-hw2-q1.dat";
+    private static final String FILE_NAME = "2252441-hw2-q1.dat";
 
     public static void main(String[] args) {
         try {
@@ -39,7 +39,7 @@ public class FileWriter {
             mergeSort(numbers, 0, numbers.length - 1);
             System.out.println("sort over.");
             appendRandomInts(numbers, FILE_NAME);
-            int bytesSize = writeHuffmanCode(numbers, SEGMENT_LENGTH, FILE_NAME);
+            int bytesSize = writeHuffmanCode(numbers, SEGMENT_LENGTH, FILE_NAME, true);
             updateFile(numbers, bytesSize, FILE_NAME);
             long end = System.nanoTime();
             long duration = (end - start);
@@ -111,13 +111,8 @@ public class FileWriter {
      * 写入时首先写入序列化霍夫曼树的长度，然后写入霍夫曼树的结构，
      * 然后写入霍夫曼编码部分的总段数，分段写入霍夫曼编码，每段的头信息为两个int，
      * 是这一段字节数组的长度、这一段字节数组对应的编码中含的原始数据个数
-     * @param numbers
-     * @param segmentLength
-     * @param filePath
-     * @return
-     * @throws IOException
      */
-    private static int writeHuffmanCode(int[] numbers, int segmentLength, String filePath) throws IOException {
+    public static int writeHuffmanCode(int[] numbers, int segmentLength, String filePath, boolean prompt) throws IOException {
         HuffmanCode huffmanCode = new HuffmanCode(numbers);
         Map<Integer, String> huffmanCodes = huffmanCode.getHuffmanCodes();
         byte[] serializeTree = huffmanCode.serialize();
@@ -162,8 +157,9 @@ public class FileWriter {
         appendInt(totalSegment, filePath);
         byte[] finalData = mergeByteArraysAndInts(byteList, numList, sizeList);
         appendRandomBytes(finalData, filePath);
-        System.out.println("append over.");
-
+        if (prompt) {
+            System.out.println("append over.");
+        }
         return 4 * 2 + serializeTree.length + finalData.length;
     }
 
@@ -185,7 +181,7 @@ public class FileWriter {
 
         for (int i = 0; i < encodedString.length(); i++) {
             if (encodedString.charAt(i) == '1') {
-                byteArray[i / 8] |= (1 << (7 - (i % 8)));
+                byteArray[i / 8] |= (byte) (1 << (7 - (i % 8)));
             }
         }
         return byteArray;
@@ -204,7 +200,7 @@ public class FileWriter {
     }
 
     // 将int转为byte[4]数组
-    private static byte[] intToByteArray(int value) {
+    public static byte[] intToByteArray(int value) {
         return ByteBuffer.allocate(4).putInt(value).array();
     }
 
@@ -330,8 +326,8 @@ public class FileWriter {
             List<Integer> list = findIntsRandom(partAInts, findNumber);
             int num = partAInts[list.get(0)];
             List<Integer> byteLocations = new ArrayList<>();
-            for (int i = 0; i < list.size(); i++) {
-                byteLocations.add(list.get(i) * 4 + headerInfo.length);
+            for (Integer integer : list) {
+                byteLocations.add(integer * 4 + headerInfo.length);
             }
 
             long end = System.nanoTime();
@@ -445,7 +441,7 @@ public class FileWriter {
         return firstPos;
     }
 
-    private static void findIntsPartC(int findNumber, int[] headerInfo, String filePath) throws IOException, ClassNotFoundException {
+    public static int[] findIntsPartC(int findNumber, int[] headerInfo, String filePath) throws IOException, ClassNotFoundException {
         try {
             long startTime = System.nanoTime();
             RandomAccessFile raf = new RandomAccessFile(filePath, "r");
@@ -508,14 +504,16 @@ public class FileWriter {
             long endTime = System.nanoTime();
             long duration = (endTime - startTime);
             System.out.println("C部分查找所需时间: " + duration / 1000000 + "(毫秒)");
-            System.out.println("C部分整数值: " + findNumber);
+            System.out.println("C部分整数值: " + minNum);
             System.out.println("C部分整数个数: " + locations.size());
             System.out.println(locations);
 
             raf.close();
+            return numbers;
         } catch (IOException e) {
             e.printStackTrace();
         };
+        return new int[0];
     }
 }
 

@@ -10,8 +10,7 @@ import static hw2.Server.*;
 import static hw2.FileWriter.*;
 
 public class Client1 {
-    private static final String LOCAL_FILE_PATH = "./hw2/received-1.dat";
-    private static final String SERVER_HOST = "localhost";
+    private static final String LOCAL_FILE_PATH = "received-1.dat";
 
     public static void main(String[] args) throws ClassNotFoundException {
         try (Socket socket = new Socket(SERVER_HOST, SERVER_PORT);
@@ -24,6 +23,7 @@ public class Client1 {
             processFile(out, LOCAL_FILE_PATH, HEADER_SIZE, FIND_NUMBER);
 
             sendFileToServer(out, LOCAL_FILE_PATH);
+            System.out.println("Connection closed.");
             File file = new File(LOCAL_FILE_PATH);
             file.delete();
         } catch (IOException e) {
@@ -35,7 +35,10 @@ public class Client1 {
              DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
             out.writeUTF("READ");
             receiveFileFromServer(in);
+            System.out.println("Connection closed.");
             findInts(FIND_NUMBER, HEADER_SIZE, LOCAL_FILE_PATH);
+            File file = new File(LOCAL_FILE_PATH);
+            file.delete();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -53,10 +56,10 @@ public class Client1 {
             fis.read(partRandom);
             int[] partAInts = byteArrayToIntArray(partRandom);
             List<Integer> list = findIntsRandom(partAInts, findNumber);
-            int num = partAInts[list.get(0)];
+            int num = partAInts[list.getFirst()];
             List<Integer> byteLocations = new ArrayList<>();
-            for (int i = 0; i < list.size(); i++) {
-                byteLocations.add(list.get(i) * 4 + headerInfo.length);
+            for (Integer integer : list) {
+                byteLocations.add(integer * 4 + headerInfo.length);
             }
             long end = System.nanoTime();
             long duration = (end - start);
@@ -80,9 +83,9 @@ public class Client1 {
             fis.read(partCBytes);
             fis.close();
 
-            headerInfo[1] = headerInfo[1] - num * 4;
-            headerInfo[2] = headerInfo[2] - num * 4;
-            headerInfo[4] = headerInfo[4] - num * 4;
+            headerInfo[1] = headerInfo[1] - byteLocations.size() * 4;
+            headerInfo[2] = headerInfo[2] - byteLocations.size() * 4;
+            headerInfo[4] = headerInfo[4] - byteLocations.size() * 4;
             byte[] headerBytes = intsToBytes(headerInfo);
             FileOutputStream fos = new FileOutputStream(filePath);
             fos.write(headerBytes);
