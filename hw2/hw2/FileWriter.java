@@ -321,7 +321,7 @@ public class FileWriter {
     }
 
     /** 使用传入的FileInputStream继续读取数组 */
-    private static void findIntsPartA(FileInputStream fis, int findNumber, int[] headerInfo, String filePath) throws IOException {
+    public static void findIntsPartA(FileInputStream fis, int findNumber, int[] headerInfo, String filePath) throws IOException {
         long start = System.nanoTime();
         try {
             byte[] partRandom = new byte[headerInfo[1]];

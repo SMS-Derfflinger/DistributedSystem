@@ -7,12 +7,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static hw2.Server.*;
+import static hw2.FileWriter.*;
 
 public class Client1 {
     private static final String LOCAL_FILE_PATH = "./hw2/received-1.dat";
     private static final String SERVER_HOST = "localhost";
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws ClassNotFoundException {
         try (Socket socket = new Socket(SERVER_HOST, SERVER_PORT);
              DataInputStream in = new DataInputStream(socket.getInputStream());
              DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
@@ -20,12 +21,21 @@ public class Client1 {
             // 请求服务器发送文件
             out.writeUTF("WRITE");
             receiveFileFromServer(in);
-            processFile(out, LOCAL_FILE_PATH, FileWriter.HEADER_SIZE, FileWriter.FIND_NUMBER);
+            processFile(out, LOCAL_FILE_PATH, HEADER_SIZE, FIND_NUMBER);
 
-            // 将更新后的文件发送回服务器
-            //out.writeUTF("WRITE");
-            //sendFileToServer(out, LOCAL_FILE_PATH);
+            sendFileToServer(out, LOCAL_FILE_PATH);
+            File file = new File(LOCAL_FILE_PATH);
+            file.delete();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
+        try (Socket socket = new Socket(SERVER_HOST, SERVER_PORT);
+             DataInputStream in = new DataInputStream(socket.getInputStream());
+             DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
+            out.writeUTF("READ");
+            receiveFileFromServer(in);
+            findInts(FIND_NUMBER, HEADER_SIZE, LOCAL_FILE_PATH);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -37,12 +47,12 @@ public class Client1 {
             FileInputStream fis = new FileInputStream(filePath);
             byte[] header = new byte[headerSize];
             fis.read(header);
-            int[] headerInfo = FileWriter.byteArrayToIntArray(header);
+            int[] headerInfo = byteArrayToIntArray(header);
 
             byte[] partRandom = new byte[headerInfo[1]];
             fis.read(partRandom);
-            int[] partAInts = FileWriter.byteArrayToIntArray(partRandom);
-            List<Integer> list = FileWriter.findIntsRandom(partAInts, findNumber);
+            int[] partAInts = byteArrayToIntArray(partRandom);
+            List<Integer> list = findIntsRandom(partAInts, findNumber);
             int num = partAInts[list.get(0)];
             List<Integer> byteLocations = new ArrayList<>();
             for (int i = 0; i < list.size(); i++) {
@@ -73,13 +83,13 @@ public class Client1 {
             headerInfo[1] = headerInfo[1] - num * 4;
             headerInfo[2] = headerInfo[2] - num * 4;
             headerInfo[4] = headerInfo[4] - num * 4;
-            byte[] headerBytes = FileWriter.intsToBytes(headerInfo);
+            byte[] headerBytes = intsToBytes(headerInfo);
             FileOutputStream fos = new FileOutputStream(filePath);
             fos.write(headerBytes);
             fos.close();
 
             fos = new FileOutputStream(filePath, true);
-            byte[] newBytes = FileWriter.intsToBytes(newNumbers);
+            byte[] newBytes = intsToBytes(newNumbers);
             fos.write(newBytes);
             fos.write(partBBytes);
             fos.write(partCBytes);
@@ -88,15 +98,17 @@ public class Client1 {
             end = System.nanoTime();
             duration = (end - start);
             System.out.println("A部分删除所需时间: " + duration / 1000000 + "(毫秒)");
-
-            byte[] fileData = Files.readAllBytes(Paths.get(filePath));
-            out.writeInt(fileData.length);
-            out.write(fileData);
-            out.flush();
-
         } catch (IOException e) {
             e.printStackTrace();
         };
+    }
+
+    private static void findInts(int findNumber, int headerSize, String filePath) throws IOException, ClassNotFoundException {
+        FileInputStream fis = new FileInputStream(filePath);
+        byte[] header = new byte[headerSize];
+        fis.read(header);
+        int[] headerInfo = byteArrayToIntArray(header);
+        findIntsPartA(fis, findNumber, headerInfo, filePath);
     }
 
     private static void receiveFileFromServer(DataInputStream in) throws IOException {
@@ -111,6 +123,7 @@ public class Client1 {
         byte[] fileData = Files.readAllBytes(Paths.get(filePath));
         out.writeInt(fileData.length);
         out.write(fileData);
+        out.flush();
         System.out.println("File sent to server.");
     }
 }
