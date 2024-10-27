@@ -16,7 +16,7 @@ public class Server {
 
             while (true) {
                 Socket socket = serverSocket.accept();
-                System.out.println("New client connected");
+                System.out.println("New client connected.");
                 new Thread(() -> handleClient(socket)).start();
             }
         } catch (IOException e) {
@@ -29,14 +29,12 @@ public class Server {
              DataInputStream in = new DataInputStream(socket.getInputStream());
              DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
 
-            // 根据客户端请求进行操作
+            // 根据Client端请求进行操作
             String command = in.readUTF();
             if ("READ".equalsIgnoreCase(command)) {
-                // 读操作
                 sendFileToClient(out);
             } else if ("WRITE".equalsIgnoreCase(command)) {
-                // 写操作
-                receiveFileFromClient(in);
+                sendAndReceive(out, in);
             }
 
         } catch (IOException e) {
@@ -54,6 +52,62 @@ public class Server {
             System.out.println("File sent to client.");
         } finally {
             lock.readLock().unlock();
+        }
+    }
+
+    private static void sendAndReceive(DataOutputStream out, DataInputStream in) throws IOException {
+        lock.writeLock().lock();
+        try {
+            byte[] sendData = Files.readAllBytes(Paths.get(FILE_PATH));
+            out.writeInt(sendData.length);
+            out.write(sendData);
+            out.flush();
+            System.out.println("File sent to client.");
+
+            System.out.println("Waiting for client response...");
+            int fileSize = -1;
+            while (fileSize == -1) {
+                try {
+                    if (in.available() > 0) {
+                        fileSize = in.readInt();
+                        System.out.println("Client response size: " + fileSize);
+                    }
+                    Thread.sleep(1000);
+                } catch (EOFException e) {
+                    System.out.println("Client disconnected.");
+                    break;
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    System.out.println("Thread interrupted.");
+                    break;
+                }
+            }
+
+            byte[] receivedData = new byte[fileSize];
+            while (true) {
+                try {
+                    if (in.available() > 0) {
+                        in.readFully(receivedData);
+                        break;
+                    }
+                    Thread.sleep(1000);
+                } catch (EOFException e) {
+                    System.out.println("Client disconnected.");
+                    break;
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    System.out.println("Thread interrupted.");
+                    break;
+                }
+            }
+
+            FileOutputStream fos = new FileOutputStream(FILE_PATH);
+            fos.write(receivedData);
+            fos.close();
+            System.out.println("File received and updated.");
+            
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 

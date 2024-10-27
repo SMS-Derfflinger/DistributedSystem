@@ -13,12 +13,12 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 public class FileWriter {
-    private static final int NUM_INTEGERS = 1024 * 1024 * 128;
-    private static final int MAX_RANDOM_NUMBER = 1024 * 128;
-    private static final int SEGMENT_LENGTH = 1024 * 128;
-    private static final int RANDOM_SEED = 237;
-    private static final int FIND_NUMBER = 1024 * 64;
-    private static final int HEADER_SIZE = 24;
+    public static final int NUM_INTEGERS = 1024 * 1024 * 128;
+    public static final int MAX_RANDOM_NUMBER = 1024 * 128;
+    public static final int SEGMENT_LENGTH = 1024 * 128;
+    public static final int RANDOM_SEED = 237;
+    public static final int FIND_NUMBER = 1024 * 64;
+    public static final int HEADER_SIZE = 24;
     private static final String FILE_NAME = "./hw2/2252441-hw2-q1.dat";
 
     public static void main(String[] args) {
@@ -192,7 +192,7 @@ public class FileWriter {
     }
 
     // 将int数组转为字节数组
-    private static byte[] intsToBytes(int[] numbers) {
+    public static byte[] intsToBytes(int[] numbers) {
         byte[] bytes = new byte[numbers.length * 4];
         for (int i = 0; i < numbers.length; i++) {
             byte[] fourBytes = intToByteArray(numbers[i]);
@@ -347,7 +347,7 @@ public class FileWriter {
     }
 
     /** 在int随机数组中查找不小于且最接近目标整数的整数，返回它在int数组中的位置 */
-    private static List<Integer> findIntsRandom(int[] numbers, int findNumber) {
+    public static List<Integer> findIntsRandom(int[] numbers, int findNumber) {
         List<Integer> list = new ArrayList<>();
         int minNum = 2147483647;
         for (int i = 0; i < numbers.length; i++) {
