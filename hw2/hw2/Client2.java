@@ -5,30 +5,113 @@ import java.net.*;
 import java.nio.file.*;
 
 import static hw2.Server.*;
+import static hw2.FileWriter.*;
 
 public class Client2 {
-    private static final String LOCAL_FILE_PATH = "./hw2/received-2.dat";
+    private static final String LOCAL_FILE_PATH = "received-2.dat";
     private static final String SERVER_HOST = "localhost";
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws ClassNotFoundException {
         try (Socket socket = new Socket(SERVER_HOST, SERVER_PORT);
              DataInputStream in = new DataInputStream(socket.getInputStream());
              DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
 
             // 请求服务器发送文件
-            out.writeUTF("READ");
+            out.writeUTF("WRITE");
             receiveFileFromServer(in);
+            findInts(FIND_NUMBER, HEADER_SIZE, LOCAL_FILE_PATH);
+            processFile(out, LOCAL_FILE_PATH, HEADER_SIZE, FIND_NUMBER);
 
-            // 对本地文件进行处理，例如查找和删除
-            //processFile(LOCAL_FILE_PATH, 42);
-
-            // 将更新后的文件发送回服务器
-            //out.writeUTF("WRITE");
-            //sendFileToServer(out, LOCAL_FILE_PATH);
-
+            sendFileToServer(out, LOCAL_FILE_PATH);
+            File file = new File(LOCAL_FILE_PATH);
+            file.delete();
         } catch (IOException e) {
             e.printStackTrace();
         }
+
+        try (Socket socket = new Socket(SERVER_HOST, SERVER_PORT);
+             DataInputStream in = new DataInputStream(socket.getInputStream());
+             DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
+            out.writeUTF("READ");
+            receiveFileFromServer(in);
+            findInts(FIND_NUMBER, HEADER_SIZE, LOCAL_FILE_PATH);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void processFile(DataOutputStream out, String filePath, int headerSize, int findNumber) throws IOException {
+        long start = System.nanoTime();
+        try {
+            int[] headerInfo;
+            byte[] partABytes;
+            byte[] partBBytes;
+            byte[] partCBytes;
+            
+            try (FileInputStream fis = new FileInputStream(filePath)) {
+                byte[] header = new byte[headerSize];
+                fis.read(header);
+                headerInfo = byteArrayToIntArray(header);
+                partABytes = new byte[headerInfo[1]];
+                partBBytes = new byte[headerInfo[3]];
+                partCBytes = new byte[headerInfo[5]];
+                fis.read(partABytes);
+                fis.read(partBBytes);
+                fis.read(partCBytes);
+            }
+
+            int[] partBInts = byteArrayToIntArray(partBBytes);
+            int firstPos = binarySearch(partBInts, 0, findNumber);
+            int foundNumber = partBInts[firstPos];
+            int num = 0;
+            int pos = firstPos;
+            while (pos < partBInts.length) {
+                if (partBInts[pos] == foundNumber) {
+                    num++;
+                    pos++;
+                } else {
+                    break;
+                }
+            }
+
+            int[] newNumbers = new int[partBInts.length - num];
+            int index = 0;
+            for (int number : partBInts) {
+                if (number != foundNumber) {
+                    newNumbers[index++] = number;
+                }
+            }
+
+            headerInfo[3] = headerInfo[3] - num * 4;
+            headerInfo[4] = headerInfo[4] - num * 4;
+            byte[] headerBytes = intsToBytes(headerInfo);
+
+            try (FileOutputStream fos = new FileOutputStream(filePath)) {
+                fos.write(headerBytes);
+            }
+
+            try (FileOutputStream fos = new FileOutputStream(filePath, true)) {
+                byte[] newBytes = intsToBytes(newNumbers);
+                fos.write(partABytes);
+                fos.write(newBytes);
+                fos.write(partCBytes);
+            }
+
+            long end = System.nanoTime();
+            long duration = (end - start);
+            System.out.println("B部分删除所需时间: " + duration / 1000000 + "(毫秒)");
+        } catch (IOException e) {
+            e.printStackTrace();
+        };
+    }
+
+    private static void findInts(int findNumber, int headerSize, String filePath) throws IOException, ClassNotFoundException {
+        FileInputStream fis = new FileInputStream(filePath);
+        byte[] header = new byte[headerSize];
+        fis.read(header);
+        fis.close();
+        int[] headerInfo = byteArrayToIntArray(header);
+        findIntsPartB(findNumber, headerInfo, filePath);
     }
 
     private static void receiveFileFromServer(DataInputStream in) throws IOException {

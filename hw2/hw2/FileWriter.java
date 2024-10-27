@@ -363,7 +363,7 @@ public class FileWriter {
         return list;
     }
 
-    private static void findIntsPartB(int findNumber, int[] headerInfo, String filePath) throws IOException {
+    public static void findIntsPartB(int findNumber, int[] headerInfo, String filePath) throws IOException {
         try {
             long startTime = System.nanoTime();
             RandomAccessFile raf = new RandomAccessFile(filePath, "r");
@@ -372,12 +372,14 @@ public class FileWriter {
             int end = headerInfo[4];
 
             int firstPos = binarySearch(raf, start, length, findNumber);
+            raf.seek(firstPos);
+            int foundNumber = raf.readInt();
             List<Integer> list = new ArrayList<>();
             int pos = firstPos;
             while (pos < end) {
                 raf.seek(pos);
                 int value = raf.readInt();
-                if (value == findNumber) {
+                if (value == foundNumber) {
                     list.add(pos);
                     pos += 4;
                 } else {
@@ -386,6 +388,7 @@ public class FileWriter {
             }
             raf.seek(firstPos);
             int num = raf.readInt();
+            raf.close();
             long endTime = System.nanoTime();
             long duration = (endTime - startTime);
             System.out.println("B部分查找所需时间: " + duration / 1000000 + "(毫秒)");
@@ -423,7 +426,8 @@ public class FileWriter {
         return -1;
     }
 
-    private static int binarySearch(int[] numbers, int start, int findNumber) {
+    /** 在数组中进行二分查找，返回第一个符合条件的数据在数组中的索引 */
+    public static int binarySearch(int[] numbers, int start, int findNumber) {
         int left = 0;
         int right = numbers.length - 1;
         int firstPos = -1;
@@ -433,8 +437,6 @@ public class FileWriter {
 
             if (numbers[mid] < findNumber) {
                 left = mid + 1;
-            } else if (numbers[mid] < findNumber){
-                right = mid - 1;
             } else {
                 firstPos = mid;
                 right = mid - 1;
